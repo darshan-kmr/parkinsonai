@@ -1,0 +1,26 @@
+import pandas as pd
+import joblib
+
+# Load trained model and feature order
+model = joblib.load("trained_model.pkl")
+feature_columns = joblib.load("feature_columns.pkl")
+
+# Read latest extracted features
+df = pd.read_csv("recorded_parkinsons_features.csv")
+latest_sample = df.tail(1)
+
+# Prepare input exactly as training
+X = latest_sample.drop(columns=["name", "status"])
+X = X[feature_columns]
+
+# Run prediction
+prediction = model.predict(X)
+probability = model.predict_proba(X)
+
+# Display result
+if prediction[0] == 1:
+    print("\n🧬 Parkinson's Detected")
+else:
+    print("\n🧪 Healthy Voice Detected")
+
+print(f"Confidence: {max(probability[0]) * 100:.2f}%")
