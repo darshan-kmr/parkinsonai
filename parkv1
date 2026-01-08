@@ -1,0 +1,154 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def print_disclaimer_section():
+    print("\n" + "*"*70)
+    print("IMPORTANT MEDICAL DISCLAIMER:".center(70))
+    print("This AI model is for educational and illustrative purposes ONLY.".center(70))
+    print("It is NOT a substitute for professional medical advice, diagnosis, or treatment.".center(70))
+    print("ALWAYS seek the advice of your physician or other qualified health provider".center(70))
+    print("with any questions you may have regarding a medical condition.".center(70))
+    print("Never disregard professional medical advice or delay in seeking it".center(70))
+    print("because of something you have read or seen from this program.".center(70))
+    print("*"*70 + "\n")
+
+def display_parkinsons_info():
+    print("\n--- General Information about Parkinson's Disease ---")
+    print("Parkinson's disease (PD) is a progressive neurodegenerative disorder.")
+    print("\nCommon symptoms include:")
+    print("  - Tremor (shaking)")
+    print("  - Bradykinesia (slowness of movement)")
+    print("  - Limb rigidity")
+    print("  - Gait and balance problems")
+    print_disclaimer_section()
+
+def get_user_input(feature_names):
+    print("\n--- Enter Data for a New Prediction ---")
+    print_disclaimer_section()
+    user_values = []
+    for feature in feature_names:
+        while True:
+            try:
+                value_str = input(f"  Enter value for '{feature}': ")
+                value = float(value_str)
+                user_values.append(value)
+                break
+            except ValueError:
+                print("    Invalid input. Please enter a numeric value.")
+    return np.array(user_values).reshape(1, -1)
+
+def plot_prediction_probability(probabilities, classes):
+    plt.figure(figsize=(8, 5))
+    bars = plt.bar(classes, probabilities[0], color=['skyblue', 'salmon'])
+    plt.ylabel('Probability')
+    plt.title('Prediction Probability for Parkinson\'s Disease')
+    plt.ylim(0, 1)
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2.0, yval + 0.02, f'{yval:.2%}', ha='center', va='bottom')
+    plt.xticks(classes)
+    plt.show()
+
+def advise_next_steps(prediction_proba_parkinsons):
+    print("\n--- Regarding the Prediction ---")
+    if prediction_proba_parkinsons > 0.7:
+        print("The model indicates a higher likelihood of Parkinson's based on the input data.")
+    elif prediction_proba_parkinsons > 0.5:
+        print("The model suggests a possibility of Parkinson's based on the input data.")
+    else:
+        print("The model indicates a lower likelihood of Parkinson's based on the input data.")
+    print("\nConsult a neurologist for a professional evaluation.")
+    print_disclaimer_section()
+
+print_disclaimer_section()
+dataset_path_input = input("Enter path to Parkinson's dataset CSV file (or press Enter to use default): ").strip()
+if not dataset_path_input:
+    dataset_path_input = "parkinsons.data"
+
+try:
+    df = pd.read_csv(dataset_path_input)
+except Exception as e:
+    print(f"Error loading data: {e}")
+    exit()
+
+if 'name' not in df.columns or 'status' not in df.columns:
+    print("ERROR: Dataset must contain 'name' and 'status' columns.")
+    exit()
+
+X = df.drop(['name', 'status'], axis=1)
+y = df['status']
+feature_names = X.columns.tolist()
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+models = {
+    "Logistic Regression": LogisticRegression(solver='liblinear', random_state=42, max_iter=200),
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
+    "Support Vector Machine": SVC(probability=True, random_state=42), 
+    "K-Nearest Neighbors": KNeighborsClassifier(n_neighbors=5)
+}
+
+trained_models_dict = {}
+best_model_name = None
+best_accuracy = 0.0
+
+for model_name, model_instance in models.items():
+    model_instance.fit(X_train_scaled, y_train)
+    trained_models_dict[model_name] = model_instance
+    y_pred_test = model_instance.predict(X_test_scaled)
+    accuracy = accuracy_score(y_test, y_pred_test)
+    
+    if accuracy > best_accuracy:
+        best_accuracy = accuracy
+        best_model_name = model_name
+
+    cm = confusion_matrix(y_test, y_pred_test)
+    plt.figure(figsize=(6, 4))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='viridis')
+    plt.title(f'{model_name} Accuracy: {accuracy:.2f}')
+    plt.show(block=False)
+
+print(f"\nBest Model: {best_model_name} ({best_accuracy:.4f})")
+selected_model_for_custom_prediction = trained_models_dict.get(best_model_name)
+
+while True:
+    show_info = input("\nView info about Parkinson's? (y/n): ").strip().lower()
+    if show_info == 'y':
+        display_parkinsons_info()
+        break
+    elif show_info == 'n': break
+
+while True:
+    predict_custom = input("\nEnter custom data for prediction? (y/n): ").strip().lower()
+    if predict_custom == 'y':
+        user_data_raw = get_user_input(feature_names)
+        user_data_scaled = scaler.transform(user_data_raw)
+        prediction = selected_model_for_custom_prediction.predict(user_data_scaled)
+        
+        try:
+            probabilities = selected_model_for_custom_prediction.predict_proba(user_data_scaled)
+            predicted_status = "Parkinson's" if prediction[0] == 1 else "Healthy"
+            print(f"\nResult: {predicted_status}")
+            print(f"Confidence: {probabilities[0][prediction[0]]:.2%}")
+            plot_prediction_probability(probabilities, ['Healthy', 'Parkinson\'s'])
+            advise_next_steps(probabilities[0][1])
+        except AttributeError:
+            print(f"\nResult: {'Parkinson\'s' if prediction[0] == 1 else 'Healthy'}")
+        break
+    elif predict_custom == 'n': break
+
+print("\nmodel run successfully")
+plt.show()
